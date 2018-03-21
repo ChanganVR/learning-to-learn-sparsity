@@ -15,16 +15,15 @@ model_urls = {
 class AlexNet(nn.Module):
     def __init__(self, num_classes=1000):
         super(AlexNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2)
-        self.conv2 = nn.Conv2d(64, 192, kernel_size=5, padding=2)
-        self.conv3 = nn.Conv2d(192, 384, kernel_size=3, padding=1)
-
-        self.conv4 = nn.Conv2d(384, 256, kernel_size=3, padding=1)
-
-        self.conv5 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.dropout = nn.Dropout()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2)
+        self.conv2 = nn.Conv2d(64, 192, kernel_size=5, padding=2)
+        self.mask_conv2 = nn.Conv2d()
+        self.conv3 = nn.Conv2d(192, 384, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(384, 256, kernel_size=3, padding=1)
+        self.conv5 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
         self.fc6 = nn.Linear(256 * 6 * 6, 4096)
         self.fc7 = nn.Linear(4096, 4096)
         self.fc8 = nn.Linear(4096, num_classes)

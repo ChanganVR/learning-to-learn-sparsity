@@ -1,4 +1,4 @@
-.pth
+*.pth
 __pycache__
 datasets
 results/

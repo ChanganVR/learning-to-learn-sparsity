@@ -157,7 +157,7 @@ def main():
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=15, gamma=0.1)
 
     best_model = train(model, data_loaders, dataset_sizes, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=20)
-    torch.save(best_model, 'models/pretrained_alexnet.pth')
+    torch.save(best_model.state_dict(), 'models/fine-_alexnet.pth')
 
 
 if __name__ == '__main__':
