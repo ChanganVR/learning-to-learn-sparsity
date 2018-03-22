@@ -17,15 +17,16 @@ import sys
 logger = logging.getLogger()
 
 
-def train(model, data_loaders, dataset_sizes, criterion, optimizer, scheduler, num_epochs=25):
+def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
 
+    logger.info('Initial sparsity of conv2: {:.4f}'.format(model.compute_sparsity()))
     for epoch in range(num_epochs):
-        logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
         logger.info('-' * 10)
+        logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
@@ -53,7 +54,8 @@ def train(model, data_loaders, dataset_sizes, criterion, optimizer, scheduler, n
                 # forward
                 outputs = model(inputs)
                 _, preds = torch.max(outputs.data, 1)
-                loss = criterion(outputs, labels)
+                # loss = crossentropy + l1 regularization on mask
+                loss = criterion(outputs, labels) + model.get_mask().norm(1) * reg_lambda
 
                 # backward + optimize only if in training phase
                 if phase == 'train':
@@ -74,6 +76,7 @@ def train(model, data_loaders, dataset_sizes, criterion, optimizer, scheduler, n
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
+        logger.info('Sparsity of conv2: {:.4f}'.format(model.compute_sparsity()))
 
     time_elapsed = time.time() - since
     logger.info('Training complete in {:.0f}m {:.0f}s'.format(
@@ -135,12 +138,16 @@ def main():
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    log_file = 'results/{}_{}.log'.format(network, dataset)
+    reg_lambda = 2e-6
+    num_epochs = 500
+    learning_rate = 0.001
+    step_size = 500
+    log_file = 'results/{}_{}_{}_{}_5x5conv.log'.format(network, dataset, reg_lambda, num_epochs)
 
     # logging config
     if not os.path.exists('results'):
         os.mkdir('results')
-    file_handler = logging.FileHandler(log_file)
+    file_handler = logging.FileHandler(log_file, mode='w')
     stdout_handler = logging.StreamHandler(sys.stdout)
     logging.basicConfig(level=logging.INFO, handlers=[file_handler, stdout_handler],
                         format='%(asctime)s, %(levelname)s: %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
@@ -151,13 +158,14 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer_ft = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 
     # Decay LR by a factor of 0.1 every 100 epochs
-    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=15, gamma=0.1)
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step_size, gamma=0.1)
 
-    best_model = train(model, data_loaders, dataset_sizes, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=20)
-    torch.save(best_model.state_dict(), 'models/fine-_alexnet.pth')
+    best_model = train(model, data_loaders, dataset_sizes, reg_lambda,
+                       criterion, optimizer_ft, exp_lr_scheduler, num_epochs=num_epochs)
+    torch.save(best_model.state_dict(), 'models/masked_alexnet.pth')
 
 
 if __name__ == '__main__':
