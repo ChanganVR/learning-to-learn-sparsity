@@ -1,6 +1,7 @@
 import os
 import torch
 import logging
+import glob
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
@@ -14,7 +15,7 @@ model_urls = {
 
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes=1000):
+    def __init__(self, num_classes=1000, ):
         super(AlexNet, self).__init__()
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2)
@@ -29,16 +30,12 @@ class AlexNet(nn.Module):
         self.fc8 = nn.Linear(4096, num_classes)
 
     def forward(self, x):
-        for layer in ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']:
-            for param in self.__getattr__(layer).parameters():
-                param.requires_grad = False
-
         x = self.conv1(x)
         x = self.relu(x)
         x = self.maxpool(x)
 
         # x = self.conv2(x)
-        mask = F.sigmoid(self.mask_conv2d(self.conv2.weight))
+        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
         if not self.training:
             # discrete binarization for val or test
             # threshold the importance of single weight, not the weight itself
@@ -66,48 +63,54 @@ class AlexNet(nn.Module):
         return x
 
     def compute_sparsity(self):
-        mask = F.sigmoid(self.mask_conv2d(self.conv2.weight))
+        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
         masked_weights = torch.mul(mask, self.conv2.weight)
         non_zeros = torch.sum(mask.data.ge(0.5))
         size = torch.prod(torch.FloatTensor([x for x in masked_weights.size()]))
         return 1 - non_zeros / size
 
     def get_mask(self):
-        mask = F.sigmoid(self.mask_conv2d(self.conv2.weight))
+        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
         return mask
 
 
-def alexnet(num_classes, weights=None):
-    if weights is None:
-        pretrained_alexnet = 'models/pretrained_alexnet.pth'
-        if os.path.exists(pretrained_alexnet):
-            model = AlexNet(num_classes=num_classes)
-            model.load_state_dict(torch.load(pretrained_alexnet))
-            model.mask_conv2d = nn.Conv2d(64, 64, kernel_size=1)
-        else:
-            model = AlexNet()
-            state_dict = model_zoo.load_url(model_urls['alexnet'])
-            new_sd = dict()
-            new_sd['conv1.weight'] = state_dict['features.0.weight']
-            new_sd['conv1.bias'] = state_dict['features.0.bias']
-            new_sd['conv2.weight'] = state_dict['features.3.weight']
-            new_sd['conv2.bias'] = state_dict['features.3.bias']
-            new_sd['conv3.weight'] = state_dict['features.6.weight']
-            new_sd['conv3.bias'] = state_dict['features.6.bias']
-            new_sd['conv4.weight'] = state_dict['features.8.weight']
-            new_sd['conv4.bias'] = state_dict['features.8.bias']
-            new_sd['conv5.weight'] = state_dict['features.10.weight']
-            new_sd['conv5.bias'] = state_dict['features.10.bias']
-            new_sd['fc6.weight'] = state_dict['classifier.1.weight']
-            new_sd['fc6.bias'] = state_dict['classifier.1.bias']
-            new_sd['fc7.weight'] = state_dict['classifier.4.weight']
-            new_sd['fc7.bias'] = state_dict['classifier.4.bias']
-            new_sd['fc8.weight'] = state_dict['classifier.6.weight']
-            new_sd['fc8.bias'] = state_dict['classifier.6.bias']
-            model.load_state_dict(new_sd)
-            model.fc8 = nn.Linear(model.fc8.in_features, num_classes)
+def alexnet(num_classes, weights=None, finetuning=False):
+    if finetuning:
+        model = AlexNet()
+        state_dict = model_zoo.load_url(model_urls['alexnet'])
+        new_sd = dict()
+        new_sd['conv1.weight'] = state_dict['features.0.weight']
+        new_sd['conv1.bias'] = state_dict['features.0.bias']
+        new_sd['conv2.weight'] = state_dict['features.3.weight']
+        new_sd['conv2.bias'] = state_dict['features.3.bias']
+        new_sd['conv3.weight'] = state_dict['features.6.weight']
+        new_sd['conv3.bias'] = state_dict['features.6.bias']
+        new_sd['conv4.weight'] = state_dict['features.8.weight']
+        new_sd['conv4.bias'] = state_dict['features.8.bias']
+        new_sd['conv5.weight'] = state_dict['features.10.weight']
+        new_sd['conv5.bias'] = state_dict['features.10.bias']
+        new_sd['fc6.weight'] = state_dict['classifier.1.weight']
+        new_sd['fc6.bias'] = state_dict['classifier.1.bias']
+        new_sd['fc7.weight'] = state_dict['classifier.4.weight']
+        new_sd['fc7.bias'] = state_dict['classifier.4.bias']
+        new_sd['fc8.weight'] = state_dict['classifier.6.weight']
+        new_sd['fc8.bias'] = state_dict['classifier.6.bias']
+        model.load_state_dict(new_sd)
+        model.fc6 = nn.Linear(model.fc6.in_features, model.fc6.out_features)
+        model.fc7 = nn.Linear(model.fc7.in_features, model.fc7.out_features)
+        model.fc8 = nn.Linear(model.fc8.in_features, num_classes)
+        for layer in ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']:
+            for param in model.__getattr__(layer).parameters():
+                param.requires_grad = False
     else:
+        if weights is None:
+            weights = 'models/finetuned_alexnet_0.5543.pth'
         model = AlexNet(num_classes=num_classes)
         model.load_state_dict(torch.load(weights))
-        model.mask_conv2 = nn.Conv2d(64, 64, kernel_size=5, padding=2)
+        model.mask_cnn = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=1)
+        )
+        for layer in ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']:
+            for param in model.__getattr__(layer).parameters():
+                param.requires_grad = False
     return model

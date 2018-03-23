@@ -1,9 +1,10 @@
 import os
 import shutil
 
-os.mkdir('datasets/dtd_splits')
+if not os.path.exists('datasets/dtd_splits'):
+    os.mkdir('datasets/dtd_splits')
 
-for phase in ['train', 'val', 'test']:
+for phase in ['train', 'val', 'test', 'train_val']:
     label_file = 'datasets/dtd_orig/labels/{}1.txt'.format(phase)
     split_folder = 'datasets/dtd_splits/{}'.format(phase)
     os.mkdir(split_folder)

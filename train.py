@@ -39,7 +39,7 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
             running_loss = 0.0
             running_corrects = 0
 
-            # Iterate over data.
+            # Iterating over data once is one epoch
             for data in data_loaders[phase]:
                 # get the inputs
                 inputs, labels = data
@@ -61,7 +61,6 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
                 if phase == 'train':
                     loss.backward()
                     optimizer.step()
-
                 # statistics
                 running_loss += loss.data[0] * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
@@ -85,7 +84,7 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
 
     # load best model weights
     model.load_state_dict(best_model_wts)
-    return model
+    return model, best_acc
 
 
 def load_model(network, num_classes):
@@ -95,6 +94,8 @@ def load_model(network, num_classes):
     else:
         raise NotImplementedError
 
+    logger.info('Trainable parameters: {}'.format([name for name, p in model.named_parameters() if p.requires_grad]))
+
     return model
 
 
@@ -103,7 +104,7 @@ def load_dataset(dataset):
         data_transforms = {
             'train': transforms.Compose([
                 transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
+                # transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ]),
@@ -124,7 +125,7 @@ def load_dataset(dataset):
         image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
                                                   data_transforms[x])
                           for x in ['train', 'val', 'test']}
-        data_loaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
+        data_loaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=400,
                                                        shuffle=True, num_workers=4)
                         for x in ['train', 'val', 'test']}
         dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val', 'test']}
@@ -138,11 +139,11 @@ def main():
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    reg_lambda = 2e-6
-    num_epochs = 500
+    reg_lambda = 1e-6
+    num_epochs = 100
     learning_rate = 0.001
     step_size = 500
-    log_file = 'results/{}_{}_{}_{}_5x5conv.log'.format(network, dataset, reg_lambda, num_epochs)
+    log_file = 'results/{}_{}_{}_{}_1x1conv.log'.format(network, dataset, reg_lambda, num_epochs)
 
     # logging config
     if not os.path.exists('results'):
@@ -155,17 +156,17 @@ def main():
     model = load_model(network, num_classes)
     data_loaders, dataset_sizes = load_dataset(dataset)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss().cuda()
 
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    optimizer_ft = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, momentum=0.9)
 
     # Decay LR by a factor of 0.1 every 100 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step_size, gamma=0.1)
 
-    best_model = train(model, data_loaders, dataset_sizes, reg_lambda,
-                       criterion, optimizer_ft, exp_lr_scheduler, num_epochs=num_epochs)
-    torch.save(best_model.state_dict(), 'models/masked_alexnet.pth')
+    best_model, best_acc = train(model, data_loaders, dataset_sizes, reg_lambda,
+                                 criterion, optimizer_ft, exp_lr_scheduler, num_epochs=num_epochs)
+    torch.save(best_model.state_dict(), 'models/masked_alexnet_{:.4f}.pth'.format(best_acc))
 
 
 if __name__ == '__main__':
