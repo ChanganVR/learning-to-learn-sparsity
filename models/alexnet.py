@@ -2,6 +2,7 @@ import os
 import torch
 import logging
 import glob
+from ops import binary_quantization
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
@@ -15,8 +16,10 @@ model_urls = {
 
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes=1000, ):
+    def __init__(self, num_classes, binarization_func):
         super(AlexNet, self).__init__()
+        self.binarization_func = binarization_func
+
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2)
         self.dropout = nn.Dropout()
@@ -34,14 +37,19 @@ class AlexNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        # x = self.conv2(x)
-        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
-        if not self.training:
-            # discrete binarization for val or test
-            # threshold the importance of single weight, not the weight itself
-            mask = (mask >= 0.5).float()
-        masked_weights = torch.mul(mask, self.conv2.weight)
-        x = F.conv2d(x, masked_weights, self.conv2.bias, padding=2)
+        if self.binarization_func is None:
+            x = self.conv2(x)
+        else:
+            if self.binarization_func == 'sigmoid':
+                mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
+                if not self.training:
+                    mask = (mask >= 0.5).float()
+            elif self.binarization_func == 'sign':
+                mask = binary_quantization(self.mask_cnn(self.conv2.weight))
+            else:
+                raise NotImplementedError
+            masked_weights = mask * self.conv2.weight
+            x = F.conv2d(x, masked_weights, self.conv2.bias, padding=2)
 
         x = self.relu(x)
         x = self.maxpool(x)
@@ -74,9 +82,9 @@ class AlexNet(nn.Module):
         return mask
 
 
-def alexnet(num_classes, weights=None, finetuning=False):
+def alexnet(num_classes, mask_network, binarization_func, frozen_layers, weights=None, finetuning=False):
     if finetuning:
-        model = AlexNet()
+        model = AlexNet(num_classes, binarization_func=None)
         state_dict = model_zoo.load_url(model_urls['alexnet'])
         new_sd = dict()
         new_sd['conv1.weight'] = state_dict['features.0.weight']
@@ -105,12 +113,19 @@ def alexnet(num_classes, weights=None, finetuning=False):
     else:
         if weights is None:
             weights = 'models/finetuned_alexnet_0.5543.pth'
-        model = AlexNet(num_classes=num_classes)
+        model = AlexNet(num_classes, binarization_func)
         model.load_state_dict(torch.load(weights))
-        model.mask_cnn = nn.Sequential(
-            nn.Conv2d(64, 64, kernel_size=1)
-        )
-        for layer in ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']:
+        if mask_network == '1x1':
+            model.mask_cnn = nn.Conv2d(64, 64, kernel_size=1)
+        elif mask_network == '3x3':
+            model.mask_cnn = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        elif mask_network == '5x5':
+            model.mask_cnn = nn.Conv2d(64, 64, kernel_size=5, padding=2)
+        else:
+            raise NotImplementedError
+
+        # conv2 is not frozen, both conv2 and its importance network are trained jointly
+        for layer in frozen_layers:
             for param in model.__getattr__(layer).parameters():
                 param.requires_grad = False
     return model

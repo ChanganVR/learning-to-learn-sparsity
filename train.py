@@ -87,9 +87,9 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
     return model, best_acc
 
 
-def load_model(network, num_classes):
+def load_model(network, num_classes, mask_network, binarization_func, frozen_layers):
     if network == 'alexnet':
-        model = alexnet(num_classes)
+        model = alexnet(num_classes, mask_network, binarization_func, frozen_layers)
         model.cuda()
     else:
         raise NotImplementedError
@@ -139,21 +139,27 @@ def main():
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    reg_lambda = 1e-6
+    reg_lambda = 1e-5
     num_epochs = 100
     learning_rate = 0.001
     step_size = 500
-    log_file = 'results/{}_{}_{}_{}_1x1conv.log'.format(network, dataset, reg_lambda, num_epochs)
+    # 1x1, 3x3, 5x5, no_mask
+    mask_network = '1x1'
+    # sign, sigmoid
+    binarization_func = 'sign'
+    frozen_layers = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
 
     # logging config
     if not os.path.exists('results'):
         os.mkdir('results')
+    log_file = 'results/{}_{}_{}_{}_{}_{}.log'.format(network, dataset, reg_lambda, num_epochs, mask_network,
+                                                      binarization_func)
     file_handler = logging.FileHandler(log_file, mode='w')
     stdout_handler = logging.StreamHandler(sys.stdout)
     logging.basicConfig(level=logging.INFO, handlers=[file_handler, stdout_handler],
                         format='%(asctime)s, %(levelname)s: %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
 
-    model = load_model(network, num_classes)
+    model = load_model(network, num_classes, mask_network, binarization_func, frozen_layers)
     data_loaders, dataset_sizes = load_dataset(dataset)
 
     criterion = nn.CrossEntropyLoss().cuda()
