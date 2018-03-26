@@ -1,0 +1,37 @@
+[
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "1x1"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "3x3"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "5x5"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "res"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "res3x"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "shuffle"
+    },
+    {
+        "gpus": 1,
+        "main": "train.py",
+        "mask": "shuffle3x"
+    }
+]
