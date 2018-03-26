@@ -123,9 +123,23 @@ def alexnet(num_classes, mask_network, binarization_func, frozen_layers, weights
         elif mask_network == "res":
             from .residual import ResidualUnit
             model.mask_cnn = ResidualUnit(64, 64)
+        elif mask_network == "res3x":
+            from .residual import ResidualUnit
+            model.mask_cnn = nn.Sequential(
+                ResidualUnit(64, 64),
+                ResidualUnit(128, 128),
+                ResidualUnit(128, 64),
+            )
         elif mask_network == "shuffle":
             from .shuffle import ShuffleBlock
             model.mask_cnn = ShuffleBlock(64, 64, 1, 4)
+        elif mask_network == "shuffle3x":
+            from .shuffle import ShuffleBlock
+            model.mask_cnn = nn.Sequential(
+                ShuffleBlock(64, 128, 1, 4),
+                ShuffleBlock(128, 128, 1, 4),
+                ShuffleBlock(128, 64, 1, 4),
+            )
         else:
             raise NotImplementedError
 

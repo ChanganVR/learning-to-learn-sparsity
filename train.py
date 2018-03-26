@@ -148,7 +148,7 @@ def main(args):
     learning_rate = 0.001
     step_size = 500
     # 1x1, 3x3, 5x5, no_mask
-    mask_network = '1x1'
+    mask_network = args.mask
     # sign, sigmoid
     binarization_func = 'sign'
     frozen_layers = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
@@ -182,7 +182,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mask', type=str, default='1x1',
-                        choices=('1x1', '3x3', '5x5'))
+                        choices=('1x1', '3x3', '5x5',
+                                 'res', 'res3x',
+                                 'shuffle', 'shuffle3x'))
 
     args = parser.parse_args()
     main(args)
