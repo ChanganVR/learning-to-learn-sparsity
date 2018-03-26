@@ -1,3 +1,4 @@
+.logs/
 *.pth
 __pycache__
 datasets
