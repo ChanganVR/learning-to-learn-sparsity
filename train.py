@@ -1,18 +1,22 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.optim import lr_scheduler
-from torch.autograd import Variable
-import numpy as np
-import torchvision
-from torchvision import datasets, transforms
-from models.alexnet import alexnet
-import matplotlib.pyplot as plt
 import time
 import os
 import copy
 import logging
 import sys
+import argparse
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.optim import lr_scheduler
+from torch.autograd import Variable
+from torchvision import datasets, transforms
+import torchvision
+
+from models.alexnet import alexnet
 
 logger = logging.getLogger()
 
@@ -135,7 +139,7 @@ def load_dataset(dataset):
     return data_loaders, dataset_sizes
 
 
-def main():
+def main(args):
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
@@ -151,7 +155,7 @@ def main():
 
     # logging config
     if not os.path.exists('results'):
-        os.mkdir('results')
+        os.makedirs('results', exist_ok=True)
     log_file = 'results/{}_{}_{}_{}_{}_{}.log'.format(network, dataset, reg_lambda, num_epochs, mask_network,
                                                       binarization_func)
     file_handler = logging.FileHandler(log_file, mode='w')
@@ -176,4 +180,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mask', type=str, default='1x1',
+                        choices=('1x1', '3x3', '5x5'))
+
+    args = parser.parse_args()
+    main(args)

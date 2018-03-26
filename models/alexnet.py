@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 
-
 logger = logging.getLogger()
 __all__ = ['AlexNet', 'alexnet']
 model_urls = {
@@ -121,6 +120,12 @@ def alexnet(num_classes, mask_network, binarization_func, frozen_layers, weights
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         elif mask_network == '5x5':
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=5, padding=2)
+        elif mask_network == "res":
+            from .residual import ResidualUnit
+            model.mask_cnn = ResidualUnit(64, 64)
+        elif mask_network == "shuffle":
+            from .shuffle import ShuffleBlock
+            model.mask_cnn = ShuffleBlock(64, 64, 1, 4)
         else:
             raise NotImplementedError
 
