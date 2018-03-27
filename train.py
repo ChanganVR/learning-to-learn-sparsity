@@ -21,7 +21,7 @@ from models.alexnet import alexnet
 logger = logging.getLogger()
 
 
-def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, scheduler, num_epochs=25):
+def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, scheduler, mask_network, num_epochs=25):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -58,8 +58,14 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
                 # forward
                 outputs = model(inputs)
                 _, preds = torch.max(outputs.data, 1)
-                # loss = crossentropy + l1 regularization on mask
-                loss = criterion(outputs, labels) + model.get_mask().norm(1) * reg_lambda
+                if mask_network is None:
+                    # normal l1 regularization on weights
+                    loss = criterion(outputs, labels) + model.conv2.weight.norm(1) * reg_lambda
+                elif mask_network == 'dns':
+                    loss = criterion(outputs, labels)
+                else:
+                    # loss = crossentropy + l1 regularization on mask
+                    loss = criterion(outputs, labels) + model.compute_mask().norm(1) * reg_lambda
 
                 # backward + optimize only if in training phase
                 if phase == 'train':
@@ -91,9 +97,9 @@ def train(model, data_loaders, dataset_sizes, reg_lambda, criterion, optimizer, 
     return model, best_acc
 
 
-def load_model(network, num_classes, mask_network, binarization_func, frozen_layers):
+def load_model(network, num_classes, mask_network, binarization_func, frozen_layers, dns_threshold, l1_threshold):
     if network == 'alexnet':
-        model = alexnet(num_classes, mask_network, binarization_func, frozen_layers)
+        model = alexnet(num_classes, mask_network, binarization_func, frozen_layers, dns_threshold, l1_threshold)
         model.cuda()
     else:
         raise NotImplementedError
@@ -143,27 +149,45 @@ def main(args):
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    reg_lambda = 1e-5
-    num_epochs = 100
+    reg_lambda = 1e-2
+    num_epochs = 200
     learning_rate = 0.001
     step_size = 500
+    dns_threshold = 1e-1
+    l1_threshold = 1e-4
     # 1x1, 3x3, 5x5, no_mask
-    mask_network = args.mask
+    mask_network = args.mask if args.mask != 'none' else None
     # sign, sigmoid
     binarization_func = 'sign'
-    frozen_layers = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
+    frozen_layers = ['conv1', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
 
     # logging config
     if not os.path.exists('results'):
         os.makedirs('results', exist_ok=True)
-    log_file = 'results/{}_{}_{}_{}_{}_{}.log'.format(network, dataset, reg_lambda, num_epochs, mask_network,
-                                                      binarization_func)
+    postfix = ''
+    if len(frozen_layers) == 8:
+        # only training mask_cnn
+        postfix = ''
+    elif len(frozen_layers) == 7:
+        # training conv2 and mask_cnn jointly
+        postfix = '_joint'
+    elif len(frozen_layers) == 0:
+        # train conv2 and all layers together
+        postfix = '_all'
+    if mask_network is None:
+        pass
+    elif mask_network == 'dns':
+        postfix = '_{}{}'.format(dns_threshold, postfix)
+    else:
+        postfix = '_{}{}'.format(binarization_func, postfix)
+    log_file = 'results/{}_{}_{}_{}_{}{}.log'.format(network, dataset, reg_lambda, num_epochs, mask_network, postfix)
+
     file_handler = logging.FileHandler(log_file, mode='w')
     stdout_handler = logging.StreamHandler(sys.stdout)
     logging.basicConfig(level=logging.INFO, handlers=[file_handler, stdout_handler],
                         format='%(asctime)s, %(levelname)s: %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
 
-    model = load_model(network, num_classes, mask_network, binarization_func, frozen_layers)
+    model = load_model(network, num_classes, mask_network, binarization_func, frozen_layers, dns_threshold, l1_threshold)
     data_loaders, dataset_sizes = load_dataset(dataset)
 
     criterion = nn.CrossEntropyLoss().cuda()
@@ -175,7 +199,7 @@ def main(args):
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step_size, gamma=0.1)
 
     best_model, best_acc = train(model, data_loaders, dataset_sizes, reg_lambda,
-                                 criterion, optimizer_ft, exp_lr_scheduler, num_epochs=num_epochs)
+                                 criterion, optimizer_ft, exp_lr_scheduler, mask_network, num_epochs=num_epochs)
     torch.save(best_model.state_dict(), 'models/masked_alexnet_{:.4f}.pth'.format(best_acc))
 
 
@@ -184,7 +208,8 @@ if __name__ == '__main__':
     parser.add_argument('--mask', type=str, default='1x1',
                         choices=('1x1', '3x3', '5x5',
                                  'res', 'res3x',
-                                 'shuffle', 'shuffle3x'))
+                                 'shuffle', 'shuffle3x',
+                                 'dns', 'none'))
 
     args = parser.parse_args()
     main(args)

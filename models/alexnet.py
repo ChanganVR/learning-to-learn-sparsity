@@ -1,8 +1,7 @@
 import os
 import torch
 import logging
-import glob
-from ops import binary_quantization
+from ops import binary_quantization, dns
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
@@ -15,9 +14,12 @@ model_urls = {
 
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes, binarization_func):
+    def __init__(self, num_classes, mask_network, binarization_func, dns_threshold=None, l1_threshold=None):
         super(AlexNet, self).__init__()
         self.binarization_func = binarization_func
+        self.mask_network = mask_network
+        self.dns_threshold = dns_threshold
+        self.l1_threshold = l1_threshold
 
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2)
@@ -36,18 +38,14 @@ class AlexNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        if self.binarization_func is None:
+        if self.mask_network is None and self.training:
             x = self.conv2(x)
         else:
-            if self.binarization_func == 'sigmoid':
-                mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
-                if not self.training:
-                    mask = (mask >= 0.5).float()
-            elif self.binarization_func == 'sign':
-                mask = binary_quantization(self.mask_cnn(self.conv2.weight))
+            mask = self.compute_mask()
+            if self.mask_network == 'dns':
+                masked_weights = dns(self.conv2.weight, mask)
             else:
-                raise NotImplementedError
-            masked_weights = mask * self.conv2.weight
+                masked_weights = mask * self.conv2.weight
             x = F.conv2d(x, masked_weights, self.conv2.bias, padding=2)
 
         x = self.relu(x)
@@ -70,20 +68,33 @@ class AlexNet(nn.Module):
         return x
 
     def compute_sparsity(self):
-        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
-        masked_weights = torch.mul(mask, self.conv2.weight)
-        non_zeros = torch.sum(mask.data.ge(0.5))
-        size = torch.prod(torch.FloatTensor([x for x in masked_weights.size()]))
+        mask = self.compute_mask()
+        masked_weights = mask * self.conv2.weight
+        non_zeros = torch.nonzero(mask.data).size(0)
+        size = torch.prod(torch.FloatTensor(list(masked_weights.size())))
         return 1 - non_zeros / size
 
-    def get_mask(self):
-        mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
+    def compute_mask(self):
+        if self.mask_network is None:
+            mask = (self.conv2.weight.abs() > self.l1_threshold).float()
+        elif self.mask_network == 'dns':
+            mask = (self.conv2.weight.abs() > self.dns_threshold).float()
+        else:
+            if self.binarization_func == 'sigmoid':
+                mask = F.sigmoid(self.mask_cnn(self.conv2.weight))
+                if not self.training:
+                    mask = torch.ge(mask, 0.5)
+            elif self.binarization_func == 'sign':
+                mask = binary_quantization(self.mask_cnn(self.conv2.weight))
+            else:
+                raise NotImplementedError
         return mask
 
 
-def alexnet(num_classes, mask_network, binarization_func, frozen_layers, weights=None, finetuning=False):
+def alexnet(num_classes, mask_network, binarization_func, frozen_layers, dns_threshold, l1_threshold,
+            weights=None, finetuning=False):
     if finetuning:
-        model = AlexNet(num_classes, binarization_func=None)
+        model = AlexNet(num_classes, mask_network=None, binarization_func=None)
         state_dict = model_zoo.load_url(model_urls['alexnet'])
         new_sd = dict()
         new_sd['conv1.weight'] = state_dict['features.0.weight']
@@ -112,9 +123,12 @@ def alexnet(num_classes, mask_network, binarization_func, frozen_layers, weights
     else:
         if weights is None:
             weights = 'models/finetuned_alexnet_0.5543.pth'
-        model = AlexNet(num_classes, binarization_func)
+        model = AlexNet(num_classes, mask_network, binarization_func, dns_threshold, l1_threshold)
         model.load_state_dict(torch.load(weights))
-        if mask_network == '1x1':
+
+        if mask_network is None or mask_network == 'dns':
+            pass
+        elif mask_network == '1x1':
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=1)
         elif mask_network == '3x3':
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=3, padding=1)
