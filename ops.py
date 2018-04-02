@@ -3,7 +3,9 @@ from torch.autograd import Function
 
 
 class BinaryQuantization(Function):
-    """ Implementation of paper: Deep Learning With Low Precision by Half-Wave Gaussian Quantization
+    """ Implementation of paper: "Binarized Neural Networks: Training Deep Neural Networks with Weights and Activations
+    Constrained to +1 or -1"
+"
     Forward using sign()
     Backward using hard-tanh()
     """

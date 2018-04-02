@@ -70,9 +70,10 @@ class AlexNet(nn.Module):
     def compute_sparsity(self):
         mask = self.compute_mask()
         masked_weights = mask * self.conv2.weight
-        non_zeros = torch.nonzero(mask.data).size(0)
-        size = torch.prod(torch.FloatTensor(list(masked_weights.size())))
-        return 1 - non_zeros / size
+        non_zeros = list(torch.nonzero(mask.data).size())
+        non_zeros_size = non_zeros[0] if len(non_zeros) != 0 else 0
+        total_size = torch.prod(torch.FloatTensor(list(masked_weights.size())))
+        return 1 - non_zeros_size / total_size
 
     def compute_mask(self):
         if self.mask_network is None:
@@ -85,7 +86,7 @@ class AlexNet(nn.Module):
                 if not self.training:
                     mask = torch.ge(mask, 0.5)
             elif self.binarization_func == 'sign':
-                mask = binary_quantization(self.mask_cnn(self.conv2.weight))
+                mask = binary_quantization(self.mask_cnn(self.conv2.weight.abs()))
             else:
                 raise NotImplementedError
         return mask

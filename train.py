@@ -149,7 +149,7 @@ def main(args):
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    reg_lambda = 1e-2
+    reg_lambda = 1e-4
     num_epochs = 200
     learning_rate = 0.001
     step_size = 500
