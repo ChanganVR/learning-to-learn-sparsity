@@ -158,7 +158,7 @@ def main(args):
     # 1x1, 3x3, 5x5, no_mask
     mask_network = args.mask if args.mask != 'none' else None
     # sign, sigmoid
-    binarization_func = 'sign'
+    binarization_func = 'sign_abs'
     frozen_layers = ['conv1', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
 
     # logging config

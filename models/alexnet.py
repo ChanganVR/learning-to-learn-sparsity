@@ -87,6 +87,8 @@ class AlexNet(nn.Module):
                     mask = torch.ge(mask, 0.5)
             elif self.binarization_func == 'sign':
                 mask = binary_quantization(self.mask_cnn(self.conv2.weight.abs()))
+            elif self.binarization_func == 'sign_abs':
+                mask = binary_quantization(self.mask_cnn(self.conv2.weight.abs()).abs()-0.1)
             else:
                 raise NotImplementedError
         return mask
