@@ -149,7 +149,7 @@ def main(args):
     network = 'alexnet'
     dataset = 'dtd'
     num_classes = 47
-    reg_lambda = 1e-4
+    reg_lambda = 1e-5
     num_epochs = 200
     learning_rate = 0.001
     step_size = 500
@@ -158,7 +158,7 @@ def main(args):
     # 1x1, 3x3, 5x5, no_mask
     mask_network = args.mask if args.mask != 'none' else None
     # sign, sigmoid
-    binarization_func = 'sign_abs'
+    binarization_func = 'sign'
     frozen_layers = ['conv1', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
 
     # logging config
@@ -206,7 +206,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mask', type=str, default='1x1',
-                        choices=('1x1', '3x3', '5x5',
+                        choices=('1x1', '3x3', '5x5', '5x5x5',
                                  'res', 'res3x',
                                  'shuffle', 'shuffle3x',
                                  'dns', 'none'))

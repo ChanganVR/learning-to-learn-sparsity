@@ -86,9 +86,19 @@ class AlexNet(nn.Module):
                 if not self.training:
                     mask = torch.ge(mask, 0.5)
             elif self.binarization_func == 'sign':
-                mask = binary_quantization(self.mask_cnn(self.conv2.weight.abs()))
+                if self.mask_network == '5x5x5':
+                    mask_cnn_output = self.mask_cnn(self.conv2.weight.abs().unsqueeze(0))
+                    mask_cnn_output = mask_cnn_output.squeeze()
+                else:
+                    mask_cnn_output = self.mask_cnn(self.conv2.weight.abs())
+                mask = binary_quantization(mask_cnn_output)
             elif self.binarization_func == 'sign_abs':
-                mask = binary_quantization(self.mask_cnn(self.conv2.weight.abs()).abs()-0.1)
+                if self.mask_network == '5x5x5':
+                    mask_cnn_output = self.mask_cnn(self.conv2.weight.abs().unsqueeze(0))
+                    mask_cnn_output = mask_cnn_output.squeeze()
+                else:
+                    mask_cnn_output = self.mask_cnn(self.conv2.weight.abs())
+                mask = binary_quantization(mask_cnn_output.abs()-0.1)
             else:
                 raise NotImplementedError
         return mask
@@ -137,6 +147,8 @@ def alexnet(num_classes, mask_network, binarization_func, frozen_layers, dns_thr
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=3, padding=1)
         elif mask_network == '5x5':
             model.mask_cnn = nn.Conv2d(64, 64, kernel_size=5, padding=2)
+        elif mask_network == '5x5x5':
+            model.mask_cnn = nn.Conv3d(192, 192, kernel_size=(5, 5, 5), padding=(2, 2, 2))
         elif mask_network == "res":
             from .residual import ResidualUnit
             model.mask_cnn = ResidualUnit(64, 64)
