@@ -2,8 +2,8 @@
 Magnitude-based pruning is widely used in network compression, which
 simply prunes away weights below certain manually set magnitude threshold.
 But the magnitude of weights doesn't mean importance necessarily, because
-there is some correlation between weights like sharpening filter. This
-projects aim to study the correlation between weights using a hypernetwork
+there are some correlations between weights like sharpening filter. This
+project aims to study the correlation between weights using a hypernetwork
 and predict the importance of weights and filters.
 
 
